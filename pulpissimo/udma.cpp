@@ -107,6 +107,8 @@ void udma::spim_regs_cb() {
     uint32_t cmd_buffer_addr{regs->i_spi.SPIM_CMD_SADDR.get()};
     for (size_t i = 0; i < regs->i_spi.SPIM_CMD_SIZE / 4; ++i) {
       // get data from vp memory via tlm payload
+      // test
+
       cmd_buffer_addr += 4;
     }
     exit(1);
