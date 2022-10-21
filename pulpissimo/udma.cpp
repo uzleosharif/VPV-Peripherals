@@ -107,7 +107,17 @@ void udma::spim_regs_cb() {
     uint32_t cmd_buffer_addr{regs->i_spi.SPIM_CMD_SADDR.get()};
     for (size_t i = 0; i < regs->i_spi.SPIM_CMD_SIZE / 4; ++i) {
       // get data from vp memory via tlm payload
-      // test
+      tlm::tlm_generic_payload gp{};
+      sc_core::sc_time delay{sc_core::SC_ZERO_TIME};
+      uint32_t x[4]{};
+
+      gp.set_command(tlm::TLM_READ_COMMAND);
+      gp.set_data_length(16);
+      gp.set_address(cmd_buffer_addr);
+      gp.set_data_ptr(reinterpret_cast<unsigned char *>(x));
+
+      l2_mem_->handle_operation(gp, delay);
+      exit(1);
 
       cmd_buffer_addr += 4;
     }
