@@ -6,9 +6,8 @@
 
 #ifndef _PULPISSIMO_UDMA_H_
 #define _PULPISSIMO_UDMA_H_
-#include "scc/tlm_target.h"
-
 #include "scc/memory.h"
+#include "scc/tlm_target.h"
 
 namespace vpvper::pulpissimo {
 namespace gen {
@@ -16,22 +15,24 @@ class udma_regs;
 }
 
 class udma : public sc_core::sc_module, public scc::tlm_target<> {
-public:
-    sc_core::sc_in<sc_core::sc_time> clk_i{"clk_i"};
-    sc_core::sc_in<bool> rst_i{"rst_i"};
-    udma(sc_core::sc_module_name nm, scc::memory<512_kB, 32> *l2_mem);
-    virtual ~udma() override;
+ public:
+  sc_core::sc_in<sc_core::sc_time> clk_i{"clk_i"};
+  sc_core::sc_in<bool> rst_i{"rst_i"};
 
-protected:
-    void clock_cb();
-    void reset_cb();
-    void spim_regs_cb();
+  udma(sc_core::sc_module_name nm, scc::memory<512_kB, 32> *l2_mem);
+  virtual ~udma() override;
 
-    sc_core::sc_time clk;
-    std::unique_ptr<gen::udma_regs> regs;
-    scc::memory<512_kB, 32> *l2_mem_{nullptr};
+ protected:
+  sc_core::sc_time clk;
+  std::unique_ptr<gen::udma_regs> regs;
+  scc::memory<512_kB, 32> *l2_mem_{nullptr};
+
+  void clock_cb();
+  void reset_cb();
+  void spim_regs_cb();
+  int handleSPIMConfigCommands();
 };
 
-} /* namespace pulpissimo */
+}  // namespace vpvper::pulpissimo
 
 #endif /* _PULPISSIMO_UDMA_H_ */

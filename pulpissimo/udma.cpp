@@ -10,6 +10,8 @@
 #include "scc/utilities.h"
 #include "util.h"
 
+// TODO: chip select logic -> what chip select is live and associated error handling
+
 namespace vpvper::pulpissimo {
 SC_HAS_PROCESS(udma);  // NOLINT
 
@@ -103,29 +105,20 @@ void udma::spim_regs_cb() {
   // SPIM_CMD_CFG register
   regs->i_spi.SPIM_CMD_CFG.set_read_cb(vpvper::pulpissimo::simple_read);
   regs->i_spi.SPIM_CMD_CFG.set_write_cb([this](scc::sc_register<uint32_t> &reg, uint32_t v, sc_core::sc_time d) {
-    std::cout << "checking SPI commands\n";
-    uint32_t cmd_buffer_addr{regs->i_spi.SPIM_CMD_SADDR.get()};
-    for (size_t i = 0; i < regs->i_spi.SPIM_CMD_SIZE / 4; ++i) {
-      // get data from vp memory via tlm payload
-      tlm::tlm_generic_payload gp{};
-      sc_core::sc_time delay{sc_core::SC_ZERO_TIME};
-      uint32_t x[4]{};
-
-      gp.set_command(tlm::TLM_READ_COMMAND);
-      gp.set_data_length(16);
-      gp.set_address(cmd_buffer_addr);
-      gp.set_data_ptr(reinterpret_cast<unsigned char *>(x));
-
-      l2_mem_->handle_operation(gp, delay);
-      exit(1);
-
-      cmd_buffer_addr += 4;
-    }
-    exit(1);
-
     reg.put(v);
-    return true;
+    return handleSPIMConfigCommands();
   });
+}
+
+int udma::handleSPIMConfigCommands() {
+  uint32_t current_cfg{regs->i_spi.SPIM_CMD_CFG.get()};
+  std::cout << std::hex << "current-cfg: " << current_cfg << std::dec << "\n";
+  exit(1);
+
+  // 0x0000_0032 : sets the configuration for the SPIM IP t0 0x32 -> clock divided by 50 !! -> HW info not relevant
+  // 0x1000_0001 : sets the chip select -> select CSN1 -> HW info not relevant
+  // 0x7007_000f : receive data
+  // 0x9000_0001 : clear the chip select -> clear CSN1 -> HW info not relevant
 }
 
 //////////
