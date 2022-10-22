@@ -8,14 +8,13 @@
 
 #include "gen/udma.h"
 #include "scc/utilities.h"
-#include "util.h"
 
 // TODO: chip select logic -> what chip select is live and associated error handling
 
 namespace vpvper::pulpissimo {
 SC_HAS_PROCESS(udma);  // NOLINT
 
-udma::udma(sc_core::sc_module_name nm, scc::memory<512_kB, 32> *l2_mem)
+udma::udma(sc_core::sc_module_name nm, l2mem_t *l2_mem)
     : sc_core::sc_module(nm), scc::tlm_target<>(clk), NAMEDD(regs, gen::udma_regs), l2_mem_{l2_mem} {
   regs->registerResources(*this);
 
@@ -43,7 +42,7 @@ void udma::reset_cb() {
   }
 }
 
-udma::SPIM::SPIM(gen::spi_channel_regs *regs) : regs_{regs} {}
+udma::SPIM::SPIM(gen::spi_channel_regs *regs, l2mem_t *l2_mem) : regs_{regs}, l2_mem_{l2_mem} {}
 
 void udma::SPIM::spim_regs_cb() {
   // SPIM_RX_SADDR register
@@ -100,14 +99,27 @@ void udma::SPIM::spim_regs_cb() {
   // SPIM_CMD_CFG register
   regs_->SPIM_CMD_CFG.set_read_cb(vpvper::pulpissimo::simple_read);
   regs_->SPIM_CMD_CFG.set_write_cb([this](scc::sc_register<uint32_t> &reg, uint32_t v, sc_core::sc_time d) {
+    // EN | PENDING | CLR | DATASIZE | CONTINOUS
     reg.put(v);
 
-    // make sure that command configurations programmed by CPU are valid before inspecting the CMD buffer
-    bool status{isCMDCFGOk()};
-    if (!status) {
-      return false;
+    current_cfg_ = regs_->SPIM_CMD_CFG.get();
+    bool status{false};
+
+    // // make sure that command configurations programmed by CPU are valid before inspecting the CMD buffer
+    // status = isCMDCFGOk();
+    // if (!status) {
+    //   return false;
+    // }
+
+    // this is modeled at a very high level such that the SPI transactions to external devices are
+    // instantaneous i.e. happen at the same simulation tick
+    // this makes CMD CFG register kind of useless e.g. CLR does not make sense as data can never be
+    // outstanding
+    // so right now just checking if there is new transfer request or not
+    if (!current_cfg_.EN) {
+      return true;
     }
-    exit(1);
+
     // now inspecting the command buffer to update state
     status = handleCommands();
     if (!status) {
@@ -118,25 +130,43 @@ void udma::SPIM::spim_regs_cb() {
   });
 }
 
-bool udma::SPIM::isCMDCFGOk() {
-  printCMDCFG();
-  return true;
-}
+// bool udma::SPIM::isCMDCFGOk() {
+//   // printCMDCFG();
+//
+//   // queue a transfer if one is already ongoing
+//
+//   return true;
+// }
 
 void udma::SPIM::printCMDCFG() {
-  gen::spi_channel_regs::SPIM_CMD_CFG_t current_cfg{regs_->SPIM_CMD_CFG.get()};
-  std::cout << "EN = " << current_cfg.EN << "\t";
-  std::cout << "PENDING = " << current_cfg.PENDING << "\t";
-  std::cout << "CLR = " << current_cfg.CLR << "\t";
-  std::cout << "DATASIZE = " << current_cfg.DATASIZE << "\t";
-  std::cout << "CONTINOUS = " << current_cfg.CONTINOUS << "\n";
+  std::cout << "EN = " << current_cfg_.EN << "\t";
+  std::cout << "PENDING = " << current_cfg_.PENDING << "\t";
+  std::cout << "CLR = " << current_cfg_.CLR << "\t";
+  std::cout << "DATASIZE = " << current_cfg_.DATASIZE << "\t";
+  std::cout << "CONTINOUS = " << current_cfg_.CONTINOUS << "\n";
 }
 
 int udma::SPIM::handleCommands() {
-  // 0x0000_0032 : sets the configuration for the SPIM IP t0 0x32 -> clock divided by 50 !! -> HW info not relevant
-  // 0x1000_0001 : sets the chip select -> select CSN1 -> HW info not relevant
-  // 0x7007_000f : receive data
-  // 0x9000_0001 : clear the chip select -> clear CSN1 -> HW info not relevant
+  uint32_t cmd_buffer_baseaddr{regs_->SPIM_CMD_SADDR};
+  auto cmd{std::make_unique<uint32_t[]>(regs_->SPIM_CMD_SIZE / 4)};
+
+  // loading commands from memory:
+  // creating at TLM transaction
+  sc_core::sc_time delay{sc_core::SC_ZERO_TIME};
+
+  tlm::tlm_generic_payload gp{};
+  gp.set_command(tlm::TLM_READ_COMMAND);
+  gp.set_address(cmd_buffer_baseaddr - kL2MemBaseAddr);
+  gp.set_data_ptr(reinterpret_cast<unsigned char *>(cmd.get()));
+  gp.set_data_length(regs_->SPIM_CMD_SIZE);
+  gp.set_streaming_width(regs_->SPIM_CMD_SIZE);
+
+  l2_mem_->handle_operation(gp, delay);
+
+  // decoding the commands
+  for (int i = 0; i < regs_->SPIM_CMD_SIZE / 4; ++i) {
+    std::cout << std::hex << cmd[i] << std::dec << "\n";
+  }
 
   return true;
 }
