@@ -2,9 +2,13 @@
 
 #pragma once
 
+#include "scc/memory.h"
+//
 #include "systemc.h"
 
 namespace vpvper::pulpissimo {
+
+using l2mem_t = scc::memory<512_kB, 32>;
 
 inline uint32_t kL2MemBaseAddr{0x1c000000};
 

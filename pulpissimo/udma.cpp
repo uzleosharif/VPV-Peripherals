@@ -165,7 +165,32 @@ int udma::SPIM::handleCommands() {
 
   // decoding the commands
   for (int i = 0; i < regs_->SPIM_CMD_SIZE / 4; ++i) {
-    std::cout << std::hex << cmd[i] << std::dec << "\n";
+    auto opcode{cmd[i] >> 28 & 0xf};
+    switch (opcode) {
+      case 0x0:
+        // SPI_CMD_CFG : sets the configuration for SPIM IP
+        // not relevent for us as this is HW info
+        break;
+      case 0x1:
+        // SPI_CMD_SOT : sets the chip select (CS)
+        chip_select_ = cmd[i] & 0x3;
+        transfer_started_ = true;
+        break;
+      case 0x7:
+        // SPI_CMD_RX_DATA : receive data (max 256 Kb)
+        if (!transfer_started_) {
+          return false;
+        }
+
+        std::cout << "got here\n";
+        exit(1);
+
+        break;
+      case 0x9:
+        // SPI_CMD_EOT : clears the chip select (CS)
+        transfer_started_ = false;
+        break;
+    }
   }
 
   return true;

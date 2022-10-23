@@ -34,6 +34,8 @@ class udma : public sc_core::sc_module, public scc::tlm_target<> {
     gen::spi_channel_regs::SPIM_CMD_CFG_t current_cfg_{};
     // // channel-wise
     // std::array<bool, 3> is_enabled_{{false, false, false}};
+    bool transfer_started_{false};
+    size_t chip_select_{0};
 
     void printCMDCFG();
     // bool isCMDCFGOk();
