@@ -47,7 +47,16 @@ class udma : public sc_core::sc_module, public scc::tlm_target<> {
   sc_core::sc_in<bool> rst_i{"rst_i"};
 
   udma(sc_core::sc_module_name nm, l2mem_t *l2_mem);
-  virtual ~udma() override;
+  ~udma() override;
+  // even though below are not needed but they
+  // (i) make my intent clear that this should not be defined in future to avoid slicing problem
+  // (ii) nice compiler message if copy/move are done
+  udma(const udma &) = delete;
+  udma &operator=(const udma &) = delete;
+  udma(udma &&) = delete;
+  udma &operator=(udma &&) = delete;
+  // in case copying is needed then do a clone function
+  // virtual std::unique_ptr<udma> clone() const;
 
  protected:
   sc_core::sc_time clk;
