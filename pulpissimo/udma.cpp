@@ -14,11 +14,11 @@
 namespace vpvper::pulpissimo {
 SC_HAS_PROCESS(udma);  // NOLINT
 
-udma::udma(sc_core::sc_module_name nm, l2mem_t *l2_mem, std::array<tlm::tlm_initiator_socket<> *, 4> spim_sockets)
+udma::udma(sc_core::sc_module_name nm, SoC *soc, std::array<tlm::tlm_initiator_socket<> *, 4> spim_sockets)
     : sc_core::sc_module(nm),
       scc::tlm_target<>(clk),
       NAMEDD(regs, gen::udma_regs),
-      l2_mem_{l2_mem},
+      soc_{soc},
       spim_sockets_{spim_sockets} {
   regs->registerResources(*this);
 
@@ -44,9 +44,8 @@ void udma::reset_cb() {
   }
 }
 
-udma::SPIM::SPIM(gen::spi_channel_regs *regs, l2mem_t *l2_mem,
-                 std::array<tlm::tlm_initiator_socket<> *, 4> *spim_sockets)
-    : regs_{regs}, l2_mem_{l2_mem}, spim_sockets_{spim_sockets} {}
+udma::SPIM::SPIM(gen::spi_channel_regs *regs, SoC *soc, std::array<tlm::tlm_initiator_socket<> *, 4> *spim_sockets)
+    : regs_{regs}, soc_{soc}, spim_sockets_{spim_sockets} {}
 
 void udma::SPIM::spim_regs_cb() {
   // SPIM_RX_SADDR register
@@ -165,7 +164,7 @@ int udma::SPIM::handleCommands() {
   gp.set_data_length(regs_->SPIM_CMD_SIZE);
   gp.set_streaming_width(regs_->SPIM_CMD_SIZE);
 
-  l2_mem_->handle_operation(gp, delay);
+  soc_->readMemory(gp, delay);
 
   // decoding the commands
   for (int i = 0; i < regs_->SPIM_CMD_SIZE / 4; ++i) {

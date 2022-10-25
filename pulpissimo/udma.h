@@ -23,7 +23,7 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
    public:
     // raw pointers here are ok as underlying resources aren't dynamically allocated by owner so no risk of me
     // deallocating these resources
-    SPIM(gen::spi_channel_regs *, l2mem_t *, std::array<tlm::tlm_initiator_socket<> *, 4> *);
+    SPIM(gen::spi_channel_regs *, SoC *, std::array<tlm::tlm_initiator_socket<> *, 4> *);
     // as no class can inherit from this class hence no need to provide a virtual destructor (even though its provided
     // by default) and no need to suppress copy/move stuff (they are also implictly defaulted)
     // this simplifies as per rule-of-zero
@@ -36,7 +36,7 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
     const unsigned kCMD{2};
 
     gen::spi_channel_regs *regs_{nullptr};
-    l2mem_t *l2_mem_{nullptr};
+    SoC *soc_{nullptr};
     std::array<tlm::tlm_initiator_socket<> *, 4> *spim_sockets_{nullptr};
     gen::spi_channel_regs::SPIM_CMD_CFG_t current_cfg_{};
     // // channel-wise
@@ -56,7 +56,7 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
   // raw pointers here are ok as underlying resources aren't dynamically allocated by owner so no risk of me
   // deallocating these resources
   // further passing array as by value is ok as its just 4 pointers
-  udma(sc_core::sc_module_name nm, l2mem_t *l2_mem, std::array<tlm::tlm_initiator_socket<> *, 4>);
+  udma(sc_core::sc_module_name nm, SoC *, std::array<tlm::tlm_initiator_socket<> *, 4>);
   // as no class can inherit from this class hence no need to provide a virtual destructor (even though its provided
   // by default) and no need to suppress copy/move stuff (they are also implictly defaulted)
   // this simplifies as per rule-of-zero
@@ -64,9 +64,9 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
  private:
   sc_core::sc_time clk;
   std::unique_ptr<gen::udma_regs> regs;
-  l2mem_t *l2_mem_{nullptr};
+  SoC *soc_{nullptr};
   std::array<tlm::tlm_initiator_socket<> *, 4> spim_sockets_{{nullptr, nullptr, nullptr, nullptr}};
-  SPIM spim_{&regs->i_spi, l2_mem_, &spim_sockets_};
+  SPIM spim_{&regs->i_spi, soc_, &spim_sockets_};
 
   void clock_cb();
   void reset_cb();

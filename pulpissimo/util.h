@@ -3,6 +3,7 @@
 #pragma once
 
 #include "scc/memory.h"
+#include "scc/register.h"
 //
 #include "systemc.h"
 
@@ -23,5 +24,17 @@ inline std::function<bool(scc::sc_register<uint32_t> &, uint32_t, sc_core::sc_ti
       reg.put(v);
       return true;
     }};
+
+class SoC : public sc_core::sc_module {
+ public:
+  SoC(sc_core::sc_module_name);
+  virtual ~SoC() = default;
+  SoC(const SoC &) = delete;
+  SoC(SoC &&) = delete;
+  SoC &operator=(const SoC &) = delete;
+  SoC &operator=(SoC &&) = delete;
+
+  virtual void readMemory(tlm::tlm_generic_payload &, sc_core::sc_time &) = 0;
+};
 
 }  // namespace vpvper::pulpissimo
