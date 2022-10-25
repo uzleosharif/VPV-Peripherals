@@ -21,9 +21,9 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
  private:
   class SPIM final {
    public:
-    // raw pointers here are ok as underlying resources aren't dynamically allocated by owner so no risk of me
-    // deallocating these resources
-    SPIM(gen::spi_channel_regs *, SoC *, std::array<tlm::tlm_initiator_socket<> *, 4> *);
+    // passing raw pointer is dangerous but rest assured I am not going to manage this memory
+    // rather the guy who owns it ( allocates it ) is responsible for releasing it
+    SPIM(gen::spi_channel_regs *, SoC *);
     // as no class can inherit from this class hence no need to provide a virtual destructor (even though its provided
     // by default) and no need to suppress copy/move stuff (they are also implictly defaulted)
     // this simplifies as per rule-of-zero
@@ -37,7 +37,6 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
 
     gen::spi_channel_regs *regs_{nullptr};
     SoC *soc_{nullptr};
-    std::array<tlm::tlm_initiator_socket<> *, 4> *spim_sockets_{nullptr};
     gen::spi_channel_regs::SPIM_CMD_CFG_t current_cfg_{};
     // // channel-wise
     // std::array<bool, 3> is_enabled_{{false, false, false}};
@@ -53,10 +52,9 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
   sc_core::sc_in<sc_core::sc_time> clk_i{"clk_i"};
   sc_core::sc_in<bool> rst_i{"rst_i"};
 
-  // raw pointers here are ok as underlying resources aren't dynamically allocated by owner so no risk of me
-  // deallocating these resources
-  // further passing array as by value is ok as its just 4 pointers
-  udma(sc_core::sc_module_name nm, SoC *, std::array<tlm::tlm_initiator_socket<> *, 4>);
+  // passing raw pointer is dangerous but rest assured I am not going to manage this memory
+  // rather the guy who owns it ( allocates it ) is responsible for releasing it
+  udma(sc_core::sc_module_name nm, SoC *);
   // as no class can inherit from this class hence no need to provide a virtual destructor (even though its provided
   // by default) and no need to suppress copy/move stuff (they are also implictly defaulted)
   // this simplifies as per rule-of-zero
@@ -65,8 +63,7 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
   sc_core::sc_time clk;
   std::unique_ptr<gen::udma_regs> regs;
   SoC *soc_{nullptr};
-  std::array<tlm::tlm_initiator_socket<> *, 4> spim_sockets_{{nullptr, nullptr, nullptr, nullptr}};
-  SPIM spim_{&regs->i_spi, soc_, &spim_sockets_};
+  SPIM spim_{&regs->i_spi, soc_};
 
   void clock_cb();
   void reset_cb();

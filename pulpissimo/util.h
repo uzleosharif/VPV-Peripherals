@@ -25,6 +25,8 @@ inline std::function<bool(scc::sc_register<uint32_t> &, uint32_t, sc_core::sc_ti
       return true;
     }};
 
+// The pulpissimo peripherals expect their owner (i.e. SoC in which they would be integrated) to have a certain
+// structure hence use following base class to write your SoC class that require these pulpissimo peripherals
 class SoC : public sc_core::sc_module {
  public:
   SoC(sc_core::sc_module_name);
@@ -35,6 +37,7 @@ class SoC : public sc_core::sc_module {
   SoC &operator=(SoC &&) = delete;
 
   virtual void readMemory(tlm::tlm_generic_payload &, sc_core::sc_time &) = 0;
+  virtual void transmitSPIMSocket(size_t, tlm::tlm_generic_payload &, sc_core::sc_time &) = 0;
 };
 
 }  // namespace vpvper::pulpissimo

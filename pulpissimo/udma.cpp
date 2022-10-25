@@ -14,12 +14,8 @@
 namespace vpvper::pulpissimo {
 SC_HAS_PROCESS(udma);  // NOLINT
 
-udma::udma(sc_core::sc_module_name nm, SoC *soc, std::array<tlm::tlm_initiator_socket<> *, 4> spim_sockets)
-    : sc_core::sc_module(nm),
-      scc::tlm_target<>(clk),
-      NAMEDD(regs, gen::udma_regs),
-      soc_{soc},
-      spim_sockets_{spim_sockets} {
+udma::udma(sc_core::sc_module_name nm, SoC *soc)
+    : sc_core::sc_module(nm), scc::tlm_target<>(clk), NAMEDD(regs, gen::udma_regs), soc_{soc} {
   regs->registerResources(*this);
 
   SC_METHOD(clock_cb);
@@ -44,8 +40,7 @@ void udma::reset_cb() {
   }
 }
 
-udma::SPIM::SPIM(gen::spi_channel_regs *regs, SoC *soc, std::array<tlm::tlm_initiator_socket<> *, 4> *spim_sockets)
-    : regs_{regs}, soc_{soc}, spim_sockets_{spim_sockets} {}
+udma::SPIM::SPIM(gen::spi_channel_regs *regs, SoC *soc) : regs_{regs}, soc_{soc} {}
 
 void udma::SPIM::spim_regs_cb() {
   // SPIM_RX_SADDR register
@@ -222,7 +217,7 @@ int udma::SPIM::handleCommands() {
           gp.set_command(tlm::TLM_READ_COMMAND);
           gp.set_data_length(words_per_transfer * words_size);
 
-          (*(*spim_sockets_)[chip_select_])->b_transport(gp, delay);
+          soc_->transmitSPIMSocket(chip_select_, gp, delay);
         }
         break;
       }
