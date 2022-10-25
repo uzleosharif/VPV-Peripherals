@@ -17,11 +17,17 @@ namespace gen {
 class udma_regs;
 }
 
-class udma : public sc_core::sc_module, public scc::tlm_target<> {
- protected:
+class udma final : public sc_core::sc_module, public scc::tlm_target<> {
+ private:
   class SPIM final {
    public:
-    SPIM(gen::spi_channel_regs *, l2mem_t *);
+    // raw pointers here are ok as underlying resources aren't dynamically allocated by owner so no risk of me
+    // deallocating these resources
+    SPIM(gen::spi_channel_regs *, l2mem_t *, std::array<tlm::tlm_initiator_socket<> *, 4> *);
+    // as no class can inherit from this class hence no need to provide a virtual destructor (even though its provided
+    // by default) and no need to suppress copy/move stuff (they are also implictly defaulted)
+    // this simplifies as per rule-of-zero
+
     void spim_regs_cb();
 
    private:
@@ -31,6 +37,7 @@ class udma : public sc_core::sc_module, public scc::tlm_target<> {
 
     gen::spi_channel_regs *regs_{nullptr};
     l2mem_t *l2_mem_{nullptr};
+    std::array<tlm::tlm_initiator_socket<> *, 4> *spim_sockets_{nullptr};
     gen::spi_channel_regs::SPIM_CMD_CFG_t current_cfg_{};
     // // channel-wise
     // std::array<bool, 3> is_enabled_{{false, false, false}};
@@ -46,23 +53,20 @@ class udma : public sc_core::sc_module, public scc::tlm_target<> {
   sc_core::sc_in<sc_core::sc_time> clk_i{"clk_i"};
   sc_core::sc_in<bool> rst_i{"rst_i"};
 
-  udma(sc_core::sc_module_name nm, l2mem_t *l2_mem);
-  ~udma() override;
-  // even though below are not needed but they
-  // (i) make my intent clear that this should not be defined in future to avoid slicing problem
-  // (ii) nice compiler message if copy/move are done
-  udma(const udma &) = delete;
-  udma &operator=(const udma &) = delete;
-  udma(udma &&) = delete;
-  udma &operator=(udma &&) = delete;
-  // in case copying is needed then do a clone function
-  // virtual std::unique_ptr<udma> clone() const;
+  // raw pointers here are ok as underlying resources aren't dynamically allocated by owner so no risk of me
+  // deallocating these resources
+  // further passing array as by value is ok as its just 4 pointers
+  udma(sc_core::sc_module_name nm, l2mem_t *l2_mem, std::array<tlm::tlm_initiator_socket<> *, 4>);
+  // as no class can inherit from this class hence no need to provide a virtual destructor (even though its provided
+  // by default) and no need to suppress copy/move stuff (they are also implictly defaulted)
+  // this simplifies as per rule-of-zero
 
- protected:
+ private:
   sc_core::sc_time clk;
   std::unique_ptr<gen::udma_regs> regs;
   l2mem_t *l2_mem_{nullptr};
-  SPIM spim_{&regs->i_spi, l2_mem_};
+  std::array<tlm::tlm_initiator_socket<> *, 4> spim_sockets_{{nullptr, nullptr, nullptr, nullptr}};
+  SPIM spim_{&regs->i_spi, l2_mem_, &spim_sockets_};
 
   void clock_cb();
   void reset_cb();

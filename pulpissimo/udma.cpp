@@ -14,8 +14,12 @@
 namespace vpvper::pulpissimo {
 SC_HAS_PROCESS(udma);  // NOLINT
 
-udma::udma(sc_core::sc_module_name nm, l2mem_t *l2_mem)
-    : sc_core::sc_module(nm), scc::tlm_target<>(clk), NAMEDD(regs, gen::udma_regs), l2_mem_{l2_mem} {
+udma::udma(sc_core::sc_module_name nm, l2mem_t *l2_mem, std::array<tlm::tlm_initiator_socket<> *, 4> spim_sockets)
+    : sc_core::sc_module(nm),
+      scc::tlm_target<>(clk),
+      NAMEDD(regs, gen::udma_regs),
+      l2_mem_{l2_mem},
+      spim_sockets_{spim_sockets} {
   regs->registerResources(*this);
 
   SC_METHOD(clock_cb);
@@ -30,8 +34,6 @@ udma::udma(sc_core::sc_module_name nm, l2mem_t *l2_mem)
   spim_.spim_regs_cb();
 }
 
-udma::~udma() {}  // NOLINT
-
 void udma::clock_cb() { this->clk = clk_i.read(); }
 
 void udma::reset_cb() {
@@ -42,7 +44,9 @@ void udma::reset_cb() {
   }
 }
 
-udma::SPIM::SPIM(gen::spi_channel_regs *regs, l2mem_t *l2_mem) : regs_{regs}, l2_mem_{l2_mem} {}
+udma::SPIM::SPIM(gen::spi_channel_regs *regs, l2mem_t *l2_mem,
+                 std::array<tlm::tlm_initiator_socket<> *, 4> *spim_sockets)
+    : regs_{regs}, l2_mem_{l2_mem}, spim_sockets_{spim_sockets} {}
 
 void udma::SPIM::spim_regs_cb() {
   // SPIM_RX_SADDR register
@@ -189,13 +193,38 @@ int udma::SPIM::handleCommands() {
 
         auto qspi{(cmd[i] >> 27) & 0x1};
         auto lsb{cmd[i] >> 26 & 0x1};
-        auto words_per_transfer{cmd[i] >> 21 & 0x3};
+        // auto words_per_transfer{cmd[i] >> 21 & 0x3};
+        size_t words_per_transfer{0};
+        switch (cmd[i] >> 21 & 0x3) {
+          case 0: {
+            words_per_transfer = 1;
+            break;
+          }
+          case 1: {
+            words_per_transfer = 2;
+            break;
+          }
+          case 2: {
+            words_per_transfer = 4;
+            break;
+          }
+          case 3: {
+            return false;
+          }
+        }
         // in bytes
         auto words_size{(cmd[i] >> 16 & 0x1f + 1) / 8};
-        auto words_num{cmd[i] & 0xffff};
+        auto words_num{(cmd[i] & 0xffff) + 1};
 
-        std::cout << qspi << "\t" << lsb << "\t" << words_per_transfer << "\t" << words_size << "\t" << words_num
-                  << "\n";
+        auto num_transfers{words_num / words_per_transfer};
+        for (int i = 0; i < num_transfers; ++i) {
+          sc_core::sc_time delay{sc_core::SC_ZERO_TIME};
+          tlm::tlm_generic_payload gp{};
+          gp.set_command(tlm::TLM_READ_COMMAND);
+          gp.set_data_length(words_per_transfer * words_size);
+
+          (*(*spim_sockets_)[chip_select_])->b_transport(gp, delay);
+        }
         break;
       }
 
