@@ -36,7 +36,8 @@ class SoC : public sc_core::sc_module {
   SoC &operator=(const SoC &) = delete;
   SoC &operator=(SoC &&) = delete;
 
-  virtual void readMemory(tlm::tlm_generic_payload &, sc_core::sc_time &) = 0;
+  virtual void readMemory(unsigned char *, uint32_t, size_t) = 0;
+  virtual void writeMemory(unsigned char *, uint32_t, size_t) = 0;
   virtual void transmitSPIMSocket(size_t, tlm::tlm_generic_payload &, sc_core::sc_time &) = 0;
 };
 

@@ -149,17 +149,8 @@ int udma::SPIM::handleCommands() {
   auto cmd{std::make_unique<uint32_t[]>(regs_->SPIM_CMD_SIZE / 4)};
 
   // loading commands from memory:
-  // creating at TLM transaction
-  sc_core::sc_time delay{sc_core::SC_ZERO_TIME};
-
-  tlm::tlm_generic_payload gp{};
-  gp.set_command(tlm::TLM_READ_COMMAND);
-  gp.set_address(cmd_buffer_baseaddr - kL2MemBaseAddr);
-  gp.set_data_ptr(reinterpret_cast<unsigned char *>(cmd.get()));
-  gp.set_data_length(regs_->SPIM_CMD_SIZE);
-  gp.set_streaming_width(regs_->SPIM_CMD_SIZE);
-
-  soc_->readMemory(gp, delay);
+  soc_->readMemory(reinterpret_cast<unsigned char *>(cmd.get()), cmd_buffer_baseaddr - kL2MemBaseAddr,
+                   regs_->SPIM_CMD_SIZE);
 
   // decoding the commands
   for (int i = 0; i < regs_->SPIM_CMD_SIZE / 4; ++i) {
@@ -207,8 +198,9 @@ int udma::SPIM::handleCommands() {
           }
         }
         // in bytes
-        auto words_size{(cmd[i] >> 16 & 0x1f + 1) / 8};
+        auto words_size{((cmd[i] >> 16 & 0x1f) + 1) / 8};
         auto words_num{(cmd[i] & 0xffff) + 1};
+        auto l2mem_data{std::make_unique<unsigned char[]>(words_size * words_num)};
 
         auto num_transfers{words_num / words_per_transfer};
         for (int i = 0; i < num_transfers; ++i) {
@@ -216,9 +208,17 @@ int udma::SPIM::handleCommands() {
           tlm::tlm_generic_payload gp{};
           gp.set_command(tlm::TLM_READ_COMMAND);
           gp.set_data_length(words_per_transfer * words_size);
+          gp.set_data_ptr(l2mem_data.get() + i * words_per_transfer * words_size);
 
           soc_->transmitSPIMSocket(chip_select_, gp, delay);
+          if (gp.get_response_status() != tlm::TLM_OK_RESPONSE) {
+            return false;
+          }
         }
+
+        // send data to l2mem
+        // TODO: lsb stuff??
+        soc_->writeMemory(l2mem_data.get(), regs_->SPIM_RX_SADDR - kL2MemBaseAddr, words_per_transfer * words_size);
         break;
       }
 
