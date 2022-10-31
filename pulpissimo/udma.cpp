@@ -10,6 +10,7 @@
 #include "scc/utilities.h"
 
 // TODO: chip select logic -> what chip select is live and associated error handling
+// TODO: SPIM events RX, TX, CMD, EOT
 
 namespace vpvper::pulpissimo {
 SC_HAS_PROCESS(udma);  // NOLINT
@@ -40,10 +41,14 @@ void udma::reset_cb() {
   }
 }
 
-udma::SPIM::SPIM(gen::spi_channel_regs *regs, SoC *soc) : regs_{regs}, soc_{soc} {}
+udma::SPIM::SPIM(gen::spi_channel_regs *regs, SoC *soc)
+    : sc_core::sc_module{sc_core::sc_module_name{"udma-spim"}}, regs_{regs}, soc_{soc} {
+  SC_THREAD(notifyEventGenerator);
+}
 
 void udma::SPIM::spim_regs_cb() {
   // SPIM_RX_SADDR register
+  // TODO: implement below functionality
   // right now the UDMA moel is instantaneous i.e. the whole txn data is received atomically from external device
   // hence this reg should always be 0 (possibly by some other part of the model)
   regs_->SPIM_RX_SADDR.set_read_cb(vpvper::pulpissimo::simple_read);
@@ -57,6 +62,7 @@ void udma::SPIM::spim_regs_cb() {
   });
 
   // SPIM_RX_SIZE register
+  // TODO: implement below functionality
   // similar to above read_cb of RX_SPIM_SADDR, we expect to return 0 as 'size left' of rx-buffer here
   regs_->SPIM_RX_SIZE.set_read_cb(vpvper::pulpissimo::simple_read);
   regs_->SPIM_RX_SIZE.set_write_cb([this](scc::sc_register<uint32_t> &reg, uint32_t v, sc_core::sc_time d) -> bool {
@@ -109,6 +115,7 @@ void udma::SPIM::spim_regs_cb() {
     //   return false;
     // }
 
+    // TODO: implement below functionality
     // this is modeled at a very high level such that the SPI transactions to external devices are
     // instantaneous i.e. happen at the same simulation tick
     // this makes CMD CFG register kind of useless e.g. CLR does not make sense as data can never be
@@ -219,6 +226,8 @@ int udma::SPIM::handleCommands() {
         // send data to l2mem
         // TODO: lsb stuff??
         soc_->writeMemory(l2mem_data.get(), regs_->SPIM_RX_SADDR - kL2MemBaseAddr, words_per_transfer * words_size);
+
+        eot_event_.notify(kEOTDelay);
         break;
       }
 
@@ -231,6 +240,15 @@ int udma::SPIM::handleCommands() {
   }
 
   return true;
+}
+
+void udma::SPIM::notifyEventGenerator() {
+  while (1) {
+    wait(eot_event_);
+
+    // TODO: send `7` to SEG
+    soc_->setEvent(7);
+  }
 }
 
 }  // namespace vpvper::pulpissimo

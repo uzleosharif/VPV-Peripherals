@@ -18,8 +18,9 @@ class udma_regs;
 }
 
 class udma final : public sc_core::sc_module, public scc::tlm_target<> {
- private:
-  class SPIM final {
+  class SPIM final : public sc_core::sc_module {
+    SC_HAS_PROCESS(SPIM);
+
    public:
     // passing raw pointer is dangerous but rest assured I am not going to manage this memory
     // rather the guy who owns it ( allocates it ) is responsible for releasing it
@@ -34,6 +35,7 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
     const unsigned kTX{0};
     const unsigned kRX{1};
     const unsigned kCMD{2};
+    const sc_core::sc_time kEOTDelay{10, SC_US};
 
     gen::spi_channel_regs *regs_{nullptr};
     SoC *soc_{nullptr};
@@ -42,10 +44,12 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
     // std::array<bool, 3> is_enabled_{{false, false, false}};
     bool transfer_started_{false};
     size_t chip_select_{0};
+    sc_core::sc_event eot_event_{};
 
     void printCMDCFG();
     // bool isCMDCFGOk();
     int handleCommands();
+    void notifyEventGenerator();
   };
 
  public:

@@ -9,7 +9,6 @@
 #include <scc/utilities.h>
 
 #include "gen/soc_event.h"
-
 #include "util.h"
 
 namespace vpvper::pulpissimo {
@@ -23,17 +22,6 @@ soc_event::soc_event(sc_core::sc_module_name nm)
   SC_METHOD(reset_cb);
   sensitive << rst_i;
 
-/*
-  regs->SW_EVENT.set_read_cb(
-      [this](scc::sc_register<uint32_t> const&, uint32_t& v, sc_core::sc_time t) -> bool { return true; });
-  regs->ERR.set_write_cb(
-      [this](scc::sc_register<uint32_t>&, uint32_t const& v, sc_core::sc_time t) -> bool { return true; });
-
-  // FC_MASKX
-//  regs->FC_MASK.set_write_cb([this](scc::sc_register<uint32_t>& regs, uint32_t v, sc_core::sc_time t) -> bool {
-//  });
-*/
-
   // SW_EVENT
   regs->SW_EVENT.set_read_cb(vpvper::pulpissimo::simple_read);
   regs->SW_EVENT.set_write_cb(vpvper::pulpissimo::simple_write);
@@ -42,6 +30,7 @@ soc_event::soc_event(sc_core::sc_module_name nm)
   regs->FC_MASK.set_read_cb(vpvper::pulpissimo::simple_read);
   regs->FC_MASK.set_write_cb(vpvper::pulpissimo::simple_write);
 
+  // TODO: other regs
 }
 
 soc_event::~soc_event() {}  // NOLINT
@@ -54,6 +43,11 @@ void soc_event::reset_cb() {
   } else {
     regs->reset_stop();
   }
+}
+
+void soc_event::push(size_t id) {
+  // can i forward `id` event to FC?
+  // std::cout << std::hex << regs->FC_MASK[0].get() << std::dec << "\n";
 }
 
 }  // namespace vpvper::pulpissimo

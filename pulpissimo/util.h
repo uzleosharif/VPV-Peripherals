@@ -39,6 +39,7 @@ class SoC : public sc_core::sc_module {
   virtual void readMemory(unsigned char *, uint32_t, size_t) = 0;
   virtual void writeMemory(unsigned char *, uint32_t, size_t) = 0;
   virtual void transmitSPIMSocket(size_t, tlm::tlm_generic_payload &, sc_core::sc_time &) = 0;
+  virtual void setEvent(size_t) = 0;
 };
 
 }  // namespace vpvper::pulpissimo
