@@ -14,8 +14,8 @@
 namespace vpvper::pulpissimo {
 SC_HAS_PROCESS(soc_event);  // NOLINT
 
-soc_event::soc_event(sc_core::sc_module_name nm)
-    : sc_core::sc_module(nm), scc::tlm_target<>(clk), NAMEDD(regs, gen::soc_event_regs) {
+soc_event::soc_event(sc_core::sc_module_name nm, SoC *soc)
+    : sc_core::sc_module(nm), soc_{soc}, scc::tlm_target<>(clk), NAMEDD(regs, gen::soc_event_regs) {
   regs->registerResources(*this);
   SC_METHOD(clock_cb);
   sensitive << clk_i;
@@ -45,9 +45,17 @@ void soc_event::reset_cb() {
   }
 }
 
-void soc_event::push(size_t id) {
+bool soc_event::push(size_t id) {
   // can i forward `id` event to FC?
-  // std::cout << std::hex << regs->FC_MASK[0].get() << std::dec << "\n";
+  uint32_t data;
+  regs->FC_MASK[id / 32].read(reinterpret_cast<uint8_t *>(&data), 4);
+  if ((data >> id) & 0x1) {
+    return false;
+  }
+
+  soc_->raiseInterrupt(26);
+
+  return true;
 }
 
 }  // namespace vpvper::pulpissimo

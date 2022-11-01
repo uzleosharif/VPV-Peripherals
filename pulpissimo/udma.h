@@ -58,7 +58,7 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
 
   // passing raw pointer is dangerous but rest assured I am not going to manage this memory
   // rather the guy who owns it ( allocates it ) is responsible for releasing it
-  udma(sc_core::sc_module_name nm, SoC *);
+  udma(sc_core::sc_module_name, SoC *);
   // as no class can inherit from this class hence no need to provide a virtual destructor (even though its provided
   // by default) and no need to suppress copy/move stuff (they are also implictly defaulted)
   // this simplifies as per rule-of-zero
