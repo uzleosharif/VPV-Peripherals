@@ -28,7 +28,8 @@ udma::udma(sc_core::sc_module_name nm, SoC *soc)
   regs->CTRL_CFG_CG.set_read_cb(vpvper::pulpissimo::simple_read);
   regs->CTRL_CFG_CG.set_write_cb(vpvper::pulpissimo::simple_write);
 
-  spim_.spim_regs_cb();
+  spim_.regs_cb();
+  i2s_.regs_cb();
 }
 
 void udma::clock_cb() { this->clk = clk_i.read(); }
@@ -46,7 +47,7 @@ udma::SPIM::SPIM(gen::spi_channel_regs *regs, SoC *soc)
   SC_THREAD(notifyEventGenerator);
 }
 
-void udma::SPIM::spim_regs_cb() {
+void udma::SPIM::regs_cb() {
   // SPIM_RX_SADDR register
   // TODO: implement below functionality
   // right now the UDMA moel is instantaneous i.e. the whole txn data is received atomically from external device
@@ -134,6 +135,8 @@ void udma::SPIM::spim_regs_cb() {
     return true;
   });
 }
+
+void udma::I2S::regs_cb() {}
 
 // bool udma::SPIM::isCMDCFGOk() {
 //   // printCMDCFG();
@@ -245,10 +248,20 @@ int udma::SPIM::handleCommands() {
 void udma::SPIM::notifyEventGenerator() {
   while (1) {
     wait(eot_event_);
-
-    // TODO: send `7` to SEG
     soc_->setEvent(7);
   }
 }
 
+udma::I2S::I2S(gen::i2s_channel_regs *regs, SoC *soc)
+    : sc_core::sc_module{sc_core::sc_module_name{"udma-i2s"}}, regs_{regs}, soc_{soc} {
+  SC_THREAD(notifyEventGenerator);
+}
+
+void udma::I2S::notifyEventGenerator() {
+  while (1) {
+    wait(sc_core::sc_time{40, sc_core::SC_US});
+
+    soc_->setEvent(20);
+  }
+}
 }  // namespace vpvper::pulpissimo
