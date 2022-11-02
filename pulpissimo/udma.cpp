@@ -228,9 +228,9 @@ int udma::SPIM::handleCommands() {
 
         // send data to l2mem
         // TODO: lsb stuff??
-        soc_->writeMemory(l2mem_data.get(), regs_->SPIM_RX_SADDR - kL2MemBaseAddr, words_per_transfer * words_size);
-
+        soc_->writeMemory(l2mem_data.get(), regs_->SPIM_RX_SADDR - kL2MemBaseAddr, words_num * words_size);
         eot_event_.notify(kEOTDelay);
+
         break;
       }
 
