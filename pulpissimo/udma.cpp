@@ -134,6 +134,32 @@ void udma::SPIM::regs_cb() {
 
     return true;
   });
+
+  // SPIM_TX_SADDR register
+  regs_->SPIM_TX_SADDR.set_read_cb(vpvper::pulpissimo::simple_read);
+  regs_->SPIM_TX_SADDR.set_write_cb([this](scc::sc_register<uint32_t> &reg, uint32_t v, sc_core::sc_time d) -> bool {
+    if (v >= 0x1c000000 && v < 0x1c080000) {
+      reg.put(v);
+      return true;
+    } else {
+      return false;
+    }
+  });
+
+  // SPIM_TX_SIZE register
+  regs_->SPIM_TX_SIZE.set_read_cb(vpvper::pulpissimo::simple_read);
+  regs_->SPIM_TX_SIZE.set_write_cb([this](scc::sc_register<uint32_t> &reg, uint32_t v, sc_core::sc_time d) -> bool {
+    if (v <= 1048576) {
+      reg.put(v);
+      return true;
+    } else {
+      return false;
+    }
+  });
+
+  // SPIM_TX_CFG register
+  regs_->SPIM_TX_CFG.set_read_cb(vpvper::pulpissimo::simple_read);
+  regs_->SPIM_TX_CFG.set_write_cb(vpvper::pulpissimo::simple_write);
 }
 
 void udma::I2S::regs_cb() {}
@@ -158,7 +184,7 @@ int udma::SPIM::handleCommands() {
   uint32_t cmd_buffer_baseaddr{regs_->SPIM_CMD_SADDR};
   auto cmd{std::make_unique<uint32_t[]>(regs_->SPIM_CMD_SIZE / 4)};
 
-  // loading commands from memory:
+  // loading commands from memory
   soc_->readMemory(reinterpret_cast<unsigned char *>(cmd.get()), cmd_buffer_baseaddr - kL2MemBaseAddr,
                    regs_->SPIM_CMD_SIZE);
 
@@ -230,6 +256,66 @@ int udma::SPIM::handleCommands() {
         // TODO: lsb stuff??
         soc_->writeMemory(l2mem_data.get(), regs_->SPIM_RX_SADDR - kL2MemBaseAddr, words_num * words_size);
         eot_event_.notify(kEOTDelay);
+
+        break;
+      }
+
+      case 0x6: {
+        // SPIM_CMD_TX_DATA : sends data (max 256 Kb)
+        if (!transfer_started_) {
+          return false;
+        }
+
+        auto qspi{(cmd[i] >> 27) & 0x1};
+        auto lsb{cmd[i] >> 26 & 0x1};
+        // auto words_per_transfer{cmd[i] >> 21 & 0x3};
+        size_t words_per_transfer{0};
+        switch (cmd[i] >> 21 & 0x3) {
+          case 0: {
+            words_per_transfer = 1;
+            break;
+          }
+          case 1: {
+            words_per_transfer = 2;
+            break;
+          }
+          case 2: {
+            words_per_transfer = 4;
+            break;
+          }
+          case 3: {
+            return false;
+          }
+        }
+        // in bytes
+        auto words_size{((cmd[i] >> 16 & 0x1f) + 1) / 8};
+        auto words_num{(cmd[i] & 0xffff) + 1};
+
+        // send the words from l2mem to external device
+        auto l2mem_data{std::make_unique<unsigned char[]>(words_num * words_size)};
+
+        std::cout << std::hex << regs_->SPIM_TX_SADDR << std::dec << "\n";
+        exit(1);
+
+        soc_->readMemory(l2mem_data.get(), regs_->SPIM_TX_SADDR - kL2MemBaseAddr, words_num * words_size);
+        for (int i = 0; i < words_num * words_size; ++i) {
+          std::cout << (uint32_t)l2mem_data[i] << "\n";
+        }
+        exit(1);
+
+        auto num_transfers{words_num / words_per_transfer};
+        for (int i = 0; i < num_transfers; ++i) {
+          sc_core::sc_time delay{sc_core::SC_ZERO_TIME};
+          tlm::tlm_generic_payload gp{};
+          gp.set_command(tlm::TLM_WRITE_COMMAND);
+          gp.set_data_length(words_per_transfer * words_size);
+          gp.set_data_ptr(l2mem_data.get() + i * words_per_transfer * words_size);
+
+          soc_->transmitSPIMSocket(chip_select_, gp, delay);
+          if (gp.get_response_status() != tlm::TLM_OK_RESPONSE) {
+            return false;
+          }
+        }
 
         break;
       }
