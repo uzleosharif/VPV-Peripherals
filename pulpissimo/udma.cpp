@@ -44,7 +44,8 @@ void udma::reset_cb() {
 
 udma::SPIM::SPIM(gen::spi_channel_regs *regs, SoC *soc)
     : sc_core::sc_module{sc_core::sc_module_name{"udma-spim"}}, regs_{regs}, soc_{soc} {
-  SC_THREAD(notifyEventGenerator);
+  SC_THREAD(notifyRxEventGenerator);
+  SC_THREAD(notifyTxEventGenerator);
 }
 
 void udma::SPIM::regs_cb() {
@@ -302,7 +303,7 @@ int udma::SPIM::handleCommands() {
         // send data to l2mem
         // TODO: lsb stuff??
         soc_->writeMemory(l2mem_data.get(), regs_->SPIM_RX_SADDR - kL2MemBaseAddr, words_num * words_size);
-        eot_event_.notify(kEOTDelay);
+        rx_eot_event_.notify(kRxEoTDelay);
 
         break;
       }
@@ -357,6 +358,8 @@ int udma::SPIM::handleCommands() {
           }
         }
 
+        tx_eot_event_.notify(kTxEoTDelay);
+
         break;
       }
 
@@ -371,9 +374,16 @@ int udma::SPIM::handleCommands() {
   return true;
 }
 
-void udma::SPIM::notifyEventGenerator() {
+void udma::SPIM::notifyRxEventGenerator() {
   while (1) {
-    wait(eot_event_);
+    wait(rx_eot_event_);
+    soc_->setEvent(7);
+  }
+}
+
+void udma::SPIM::notifyTxEventGenerator() {
+  while (1) {
+    wait(tx_eot_event_);
     soc_->setEvent(7);
   }
 }

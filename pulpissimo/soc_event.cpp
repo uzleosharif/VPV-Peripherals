@@ -47,6 +47,7 @@ void soc_event::reset_cb() {
 
 bool soc_event::push(size_t id) {
   // can i forward `id` event to FC?
+
   uint32_t data;
   regs->FC_MASK[id / 32].read(reinterpret_cast<uint8_t *>(&data), 4);
   if ((data >> id) & 0x1) {

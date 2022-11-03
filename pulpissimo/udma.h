@@ -35,14 +35,16 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
     const unsigned kTX{0};
     const unsigned kRX{1};
     const unsigned kCMD{2};
-    const sc_core::sc_time kEOTDelay{10, SC_US};
+    const sc_core::sc_time kRxEoTDelay{10, SC_US};
+    const sc_core::sc_time kTxEoTDelay{10, SC_US};
 
     gen::spi_channel_regs *regs_{nullptr};
     SoC *soc_{nullptr};
     gen::spi_channel_regs::SPIM_CMD_CFG_t current_cmd_cfg_{};
     bool transfer_started_{false};
     size_t chip_select_{0};
-    sc_core::sc_event eot_event_{};
+    sc_core::sc_event rx_eot_event_{};
+    sc_core::sc_event tx_eot_event_{};
     bool tx_initiated_{false};
     bool rx_initiated_{false};
     bool cmd_initiated_{false};
@@ -50,7 +52,8 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
     void printCMDCFG();
     // bool isCMDCFGOk();
     int handleCommands();
-    void notifyEventGenerator();
+    void notifyRxEventGenerator();
+    void notifyTxEventGenerator();
   };
 
   class I2S final : public sc_core::sc_module {
