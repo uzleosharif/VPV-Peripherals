@@ -77,7 +77,26 @@ void udma::SPIM::regs_cb() {
 
   // SPIM_RX_CFG register
   regs_->SPIM_RX_CFG.set_read_cb(vpvper::pulpissimo::simple_read);
-  regs_->SPIM_RX_CFG.set_write_cb(vpvper::pulpissimo::simple_write);
+  regs_->SPIM_RX_CFG.set_write_cb([this](scc::sc_register<uint32_t> &reg, uint32_t v, sc_core::sc_time d) -> bool {
+    reg.put(v);
+
+    gen::spi_channel_regs::SPIM_RX_CFG_t rx_cfg{regs_->SPIM_RX_CFG.get()};
+    if (rx_cfg.EN == 1) {
+      rx_initiated_ = true;
+    }
+
+    if (cmd_initiated_ == true) {
+      int status = handleCommands();
+      if (!status) {
+        return false;
+      }
+
+      cmd_initiated_ = false;
+      rx_initiated_ = false;
+    }
+
+    return true;
+  });
 
   // SPIM_CMD_SADDR register
   regs_->SPIM_CMD_SADDR.set_read_cb(vpvper::pulpissimo::simple_read);
@@ -107,7 +126,7 @@ void udma::SPIM::regs_cb() {
     // EN | PENDING | CLR | DATASIZE | CONTINOUS
     reg.put(v);
 
-    current_cfg_ = regs_->SPIM_CMD_CFG.get();
+    current_cmd_cfg_ = regs_->SPIM_CMD_CFG.get();
     bool status{false};
 
     // // make sure that command configurations programmed by CPU are valid before inspecting the CMD buffer
@@ -122,14 +141,23 @@ void udma::SPIM::regs_cb() {
     // this makes CMD CFG register kind of useless e.g. CLR does not make sense as data can never be
     // outstanding
     // so right now just checking if there is new transfer request or not
-    if (!current_cfg_.EN) {
+    if (!current_cmd_cfg_.EN) {
       return true;
     }
 
-    // now inspecting the command buffer to update state
-    status = handleCommands();
-    if (!status) {
-      return false;
+    cmd_initiated_ = true;
+
+    // if TX,RX channels are already configured then we can already handle commands here
+    if (tx_initiated_ || rx_initiated_) {
+      // now inspecting the command buffer to update state
+      status = handleCommands();
+      if (!status) {
+        return false;
+      }
+
+      tx_initiated_ = false;
+      rx_initiated_ = false;
+      cmd_initiated_ = false;
     }
 
     return true;
@@ -159,7 +187,26 @@ void udma::SPIM::regs_cb() {
 
   // SPIM_TX_CFG register
   regs_->SPIM_TX_CFG.set_read_cb(vpvper::pulpissimo::simple_read);
-  regs_->SPIM_TX_CFG.set_write_cb(vpvper::pulpissimo::simple_write);
+  regs_->SPIM_TX_CFG.set_write_cb([this](scc::sc_register<uint32_t> &reg, uint32_t v, sc_core::sc_time d) -> bool {
+    reg.put(v);
+
+    gen::spi_channel_regs::SPIM_TX_CFG_t tx_cfg{regs_->SPIM_TX_CFG.get()};
+    if (tx_cfg.EN == 1) {
+      tx_initiated_ = true;
+    }
+
+    if (cmd_initiated_ == true) {
+      int status = handleCommands();
+      if (!status) {
+        return false;
+      }
+
+      cmd_initiated_ = false;
+      tx_initiated_ = false;
+    }
+
+    return true;
+  });
 }
 
 void udma::I2S::regs_cb() {}
@@ -173,11 +220,11 @@ void udma::I2S::regs_cb() {}
 // }
 
 void udma::SPIM::printCMDCFG() {
-  std::cout << "EN = " << current_cfg_.EN << "\t";
-  std::cout << "PENDING = " << current_cfg_.PENDING << "\t";
-  std::cout << "CLR = " << current_cfg_.CLR << "\t";
-  std::cout << "DATASIZE = " << current_cfg_.DATASIZE << "\t";
-  std::cout << "CONTINOUS = " << current_cfg_.CONTINOUS << "\n";
+  std::cout << "EN = " << current_cmd_cfg_.EN << "\t";
+  std::cout << "PENDING = " << current_cmd_cfg_.PENDING << "\t";
+  std::cout << "CLR = " << current_cmd_cfg_.CLR << "\t";
+  std::cout << "DATASIZE = " << current_cmd_cfg_.DATASIZE << "\t";
+  std::cout << "CONTINOUS = " << current_cmd_cfg_.CONTINOUS << "\n";
 }
 
 int udma::SPIM::handleCommands() {
@@ -294,14 +341,7 @@ int udma::SPIM::handleCommands() {
         // send the words from l2mem to external device
         auto l2mem_data{std::make_unique<unsigned char[]>(words_num * words_size)};
 
-        std::cout << std::hex << regs_->SPIM_TX_SADDR << std::dec << "\n";
-        exit(1);
-
         soc_->readMemory(l2mem_data.get(), regs_->SPIM_TX_SADDR - kL2MemBaseAddr, words_num * words_size);
-        for (int i = 0; i < words_num * words_size; ++i) {
-          std::cout << (uint32_t)l2mem_data[i] << "\n";
-        }
-        exit(1);
 
         auto num_transfers{words_num / words_per_transfer};
         for (int i = 0; i < num_transfers; ++i) {

@@ -39,12 +39,13 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
 
     gen::spi_channel_regs *regs_{nullptr};
     SoC *soc_{nullptr};
-    gen::spi_channel_regs::SPIM_CMD_CFG_t current_cfg_{};
-    // // channel-wise
-    // std::array<bool, 3> is_enabled_{{false, false, false}};
+    gen::spi_channel_regs::SPIM_CMD_CFG_t current_cmd_cfg_{};
     bool transfer_started_{false};
     size_t chip_select_{0};
     sc_core::sc_event eot_event_{};
+    bool tx_initiated_{false};
+    bool rx_initiated_{false};
+    bool cmd_initiated_{false};
 
     void printCMDCFG();
     // bool isCMDCFGOk();
@@ -73,9 +74,7 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
 
     gen::i2s_channel_regs *regs_{nullptr};
     SoC *soc_{nullptr};
-    // gen::spi_channel_regs::SPIM_CMD_CFG_t current_cfg_{};
-    // // channel-wise
-    // std::array<bool, 3> is_enabled_{{false, false, false}};
+    // gen::spi_channel_regs::SPIM_CMD_CFG_t current_cmd_cfg_{};
     // bool transfer_started_{false};
     // size_t chip_select_{0};
     // sc_core::sc_event eot_event_{};
