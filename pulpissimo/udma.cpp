@@ -215,8 +215,116 @@ void udma::SPIM::regs_cb() {
 }
 
 void udma::I2S::regs_cb() {
-  //
   regs_->I2S_RX_SADDR.set_read_cb(vpvper::pulpissimo::simple_read);
+  regs_->I2S_RX_SADDR.set_write_cb([this](scc::sc_register<uint32_t> &reg, uint32_t v, sc_core::sc_time d) -> bool {
+    if (v >= 0x1c000000 && v < 0x1c080000) {
+      reg.put(v);
+      return true;
+    } else {
+      return false;
+    }
+  });
+
+  regs_->I2S_RX_SIZE.set_read_cb(vpvper::pulpissimo::simple_read);
+  regs_->I2S_RX_SIZE.set_write_cb([this](scc::sc_register<uint32_t> &reg, uint32_t v, sc_core::sc_time d) -> bool {
+    if (v <= 1048576) {
+      reg.put(v);
+      return true;
+    } else {
+      return false;
+    }
+  });
+
+  regs_->I2S_RX_CFG.set_read_cb(vpvper::pulpissimo::simple_read);
+  regs_->I2S_RX_CFG.set_write_cb(vpvper::pulpissimo::simple_write);
+
+  regs_->I2S_TX_SADDR.set_read_cb(vpvper::pulpissimo::simple_read);
+  regs_->I2S_TX_SADDR.set_write_cb([this](scc::sc_register<uint32_t> &reg, uint32_t v, sc_core::sc_time d) -> bool {
+    if (v >= 0x1c000000 && v < 0x1c080000) {
+      reg.put(v);
+      return true;
+    } else {
+      return false;
+    }
+  });
+
+  regs_->I2S_TX_SIZE.set_read_cb(vpvper::pulpissimo::simple_read);
+  regs_->I2S_TX_SIZE.set_write_cb([this](scc::sc_register<uint32_t> &reg, uint32_t v, sc_core::sc_time d) -> bool {
+    if (v <= 1048576) {
+      reg.put(v);
+      return true;
+    } else {
+      return false;
+    }
+  });
+
+  regs_->I2S_TX_CFG.set_read_cb(vpvper::pulpissimo::simple_read);
+  regs_->I2S_TX_CFG.set_write_cb(vpvper::pulpissimo::simple_write);
+
+  // I2S_CLKCFG_SETUP register
+  // clock configuration for i2s-master, i2s-slave, i2s-pdm
+  regs_->I2S_CLKCFG_SETUP.set_read_cb(vpvper::pulpissimo::simple_read);
+  regs_->I2S_CLKCFG_SETUP.set_write_cb([this](scc::sc_register<uint32_t> &reg, uint32_t v, sc_core::sc_time d) -> bool {
+    reg.put(v);
+
+    gen::i2s_channel_regs::I2S_CLKCFG_SETUP_t clk_cfg{regs_->I2S_CLKCFG_SETUP.get()};
+    if (clk_cfg.SLAVE_CLK_EN) {
+      // SLAVE_EN | SLAVE_2CH | SLAVE_LSB | SLAVE_BITS | SLAVE_WORDS
+      gen::i2s_channel_regs::I2S_SLV_SETUP_t slv_cfg{regs_->I2S_SLV_SETUP.get()};
+      // slave should have been enabled by this point
+      if (slv_cfg.SLAVE_EN == 1) {
+        // by this time I2S_RX channel should have been enabled
+        gen::i2s_channel_regs::I2S_RX_CFG_t rx_cfg{regs_->I2S_RX_CFG.get()};
+        if (rx_cfg.EN == 0) {
+          return false;
+        }
+
+        auto l2mem_data{std::make_unique<unsigned char[]>(regs_->I2S_RX_SIZE.get())};
+        size_t num_transfers{(regs_->I2S_RX_SIZE.get() * 8) / (slv_cfg.SLAVE_BITS + 1)};
+        for (size_t i = 0; i < num_transfers; ++i) {
+          sc_core::sc_time delay{sc_core::SC_ZERO_TIME};
+          tlm::tlm_generic_payload gp{};
+          gp.set_command(tlm::TLM_READ_COMMAND);
+          gp.set_data_length((slv_cfg.SLAVE_BITS + 1) / 8);
+          gp.set_data_ptr(l2mem_data.get() + i * ((slv_cfg.SLAVE_BITS + 1) / 8));
+
+          // TODO: i am not sure yet how to select particular i2s interface out of many as there is no chip-select
+          soc_->transmitI2SSocket(0, gp, delay);
+          if (gp.get_response_status() != tlm::TLM_OK_RESPONSE) {
+            return false;
+          }
+        }
+
+        // send data to l2mem
+        soc_->writeMemory(l2mem_data.get(), regs_->I2S_RX_SADDR.get() - kL2MemBaseAddr, regs_->I2S_RX_SIZE.get());
+        rx_eot_event_.notify(kRxEoTDelay);
+      } else {
+        return false;
+      }
+    }
+
+    if (clk_cfg.PDM_CLK_EN) {
+      std::cout << "[udma-i2s] TODO in I2S_CLKCFG_SETUP write-cb\n";
+      exit(1);
+    }
+
+    return true;
+  });
+
+  // I2S_SLV_SETUP register
+  // configuration of I2S slave
+  regs_->I2S_SLV_SETUP.set_read_cb(vpvper::pulpissimo::simple_read);
+  regs_->I2S_SLV_SETUP.set_write_cb(vpvper::pulpissimo::simple_write);
+
+  // I2S_MST_SETUP register
+  // configuration of I2S master
+  regs_->I2S_MST_SETUP.set_read_cb(vpvper::pulpissimo::simple_read);
+  regs_->I2S_MST_SETUP.set_write_cb(vpvper::pulpissimo::simple_write);
+
+  // I2S_PDM_SETUP
+  // configuration of PDM module
+  regs_->I2S_PDM_SETUP.set_read_cb(vpvper::pulpissimo::simple_read);
+  regs_->I2S_PDM_SETUP.set_write_cb(vpvper::pulpissimo::simple_write);
 }
 
 // bool udma::SPIM::isCMDCFGOk() {
@@ -314,7 +422,7 @@ int udma::SPIM::handleCommands() {
 
         // send data to l2mem
         // TODO: lsb stuff??
-        soc_->writeMemory(l2mem_data.get(), regs_->SPIM_RX_SADDR - kL2MemBaseAddr, words_num * words_size);
+        soc_->writeMemory(l2mem_data.get(), regs_->SPIM_RX_SADDR.get() - kL2MemBaseAddr, words_num * words_size);
         rx_eot_event_.notify(kRxEoTDelay);
 
         break;
@@ -402,15 +510,22 @@ void udma::SPIM::notifyTxEventGenerator() {
 
 udma::I2S::I2S(gen::udma_regs *udma_regs, SoC *soc)
     : udma::PeriphBase{sc_core::sc_module_name{"udma-i2s"}, udma_regs, soc} {
-  SC_THREAD(notifyEventGenerator);
+  SC_THREAD(notifyRxEventGenerator);
+  SC_THREAD(notifyTxEventGenerator);
 
   regs_ = &udma_regs->i_i2s;
 }
 
-void udma::I2S::notifyEventGenerator() {
+void udma::I2S::notifyRxEventGenerator() {
   while (1) {
-    wait(sc_core::sc_time{40, sc_core::SC_US});
+    wait(rx_eot_event_);
+    soc_->setEvent(20);
+  }
+}
 
+void udma::I2S::notifyTxEventGenerator() {
+  while (1) {
+    wait(tx_eot_event_);
     soc_->setEvent(20);
   }
 }
