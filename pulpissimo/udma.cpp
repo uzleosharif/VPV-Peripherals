@@ -13,7 +13,6 @@
 // TODO: SPIM events RX, TX, CMD, EOT
 
 namespace vpvper::pulpissimo {
-SC_HAS_PROCESS(udma);  // NOLINT
 
 udma::udma(sc_core::sc_module_name nm, SoC *soc)
     : sc_core::sc_module(nm), scc::tlm_target<>(clk), NAMEDD(regs, gen::udma_regs), soc_{soc} {
@@ -42,10 +41,15 @@ void udma::reset_cb() {
   }
 }
 
-udma::SPIM::SPIM(gen::spi_channel_regs *regs, SoC *soc)
-    : sc_core::sc_module{sc_core::sc_module_name{"udma-spim"}}, regs_{regs}, soc_{soc} {
+udma::PeriphBase::PeriphBase(sc_core::sc_module_name name, gen::udma_regs *udma_regs, SoC *soc)
+    : sc_core::sc_module{name}, udma_regs_{udma_regs}, soc_{soc} {}
+
+udma::SPIM::SPIM(gen::udma_regs *udma_regs, SoC *soc)
+    : udma::PeriphBase{sc_core::sc_module_name{"udma-spim"}, udma_regs, soc} {
   SC_THREAD(notifyRxEventGenerator);
   SC_THREAD(notifyTxEventGenerator);
+
+  regs_ = &udma_regs->i_spi;
 }
 
 void udma::SPIM::regs_cb() {
@@ -210,7 +214,10 @@ void udma::SPIM::regs_cb() {
   });
 }
 
-void udma::I2S::regs_cb() {}
+void udma::I2S::regs_cb() {
+  //
+  regs_->I2S_RX_SADDR.set_read_cb(vpvper::pulpissimo::simple_read);
+}
 
 // bool udma::SPIM::isCMDCFGOk() {
 //   // printCMDCFG();
@@ -250,7 +257,12 @@ int udma::SPIM::handleCommands() {
       case 0x1: {
         // SPI_CMD_SOT : sets the chip select (CS)
         chip_select_ = cmd[i] & 0x3;
-        transfer_started_ = true;
+
+        // SPIM CG should have been enabled by this time
+        if ((udma_regs_->CTRL_CFG_CG.get() >> 1) & 0x1) {
+          transfer_started_ = true;
+        }
+
         break;
       }
 
@@ -388,9 +400,11 @@ void udma::SPIM::notifyTxEventGenerator() {
   }
 }
 
-udma::I2S::I2S(gen::i2s_channel_regs *regs, SoC *soc)
-    : sc_core::sc_module{sc_core::sc_module_name{"udma-i2s"}}, regs_{regs}, soc_{soc} {
+udma::I2S::I2S(gen::udma_regs *udma_regs, SoC *soc)
+    : udma::PeriphBase{sc_core::sc_module_name{"udma-i2s"}, udma_regs, soc} {
   SC_THREAD(notifyEventGenerator);
+
+  regs_ = &udma_regs->i_i2s;
 }
 
 void udma::I2S::notifyEventGenerator() {
