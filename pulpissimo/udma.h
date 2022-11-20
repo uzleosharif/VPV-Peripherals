@@ -34,8 +34,8 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
 
     gen::udma_regs *udma_regs_{nullptr};
     SoC *soc_{nullptr};
-    sc_core::sc_event rx_eot_event_{};
-    sc_core::sc_event tx_eot_event_{};
+    sc_core::sc_event_queue rx_eot_events_{};
+    sc_core::sc_event_queue tx_eot_events_{};
   };
 
   class SPIM final : public PeriphBase {
@@ -65,7 +65,6 @@ class udma final : public sc_core::sc_module, public scc::tlm_target<> {
     bool cmd_initiated_{false};
 
     void printCMDCFG();
-    // bool isCMDCFGOk();
     int handleCommands();
     void notifyRxEventGenerator();
     void notifyTxEventGenerator();

@@ -47,7 +47,9 @@ udma::PeriphBase::PeriphBase(sc_core::sc_module_name name, gen::udma_regs *udma_
 udma::SPIM::SPIM(gen::udma_regs *udma_regs, SoC *soc)
     : udma::PeriphBase{sc_core::sc_module_name{"udma-spim"}, udma_regs, soc} {
   SC_THREAD(notifyRxEventGenerator);
+  sensitive << rx_eot_events_;
   SC_THREAD(notifyTxEventGenerator);
+  sensitive << tx_eot_events_;
 
   regs_ = &udma_regs->i_spi;
 }
@@ -236,7 +238,16 @@ void udma::I2S::regs_cb() {
   });
 
   regs_->I2S_RX_CFG.set_read_cb(vpvper::pulpissimo::simple_read);
-  regs_->I2S_RX_CFG.set_write_cb(vpvper::pulpissimo::simple_write);
+  regs_->I2S_RX_CFG.set_write_cb([this](scc::sc_register<uint32_t> &reg, uint32_t v, sc_core::sc_time d) -> bool {
+    reg.put(v);
+
+    gen::i2s_channel_regs::I2S_RX_CFG_t rx_cfg{regs_->I2S_RX_CFG.get()};
+    if (rx_cfg.EN == 1) {
+      rx_eot_events_.notify(kRxEoTDelay);
+    }
+
+    return true;
+  });
 
   regs_->I2S_TX_SADDR.set_read_cb(vpvper::pulpissimo::simple_read);
   regs_->I2S_TX_SADDR.set_write_cb([this](scc::sc_register<uint32_t> &reg, uint32_t v, sc_core::sc_time d) -> bool {
@@ -264,55 +275,16 @@ void udma::I2S::regs_cb() {
   // I2S_CLKCFG_SETUP register
   // clock configuration for i2s-master, i2s-slave, i2s-pdm
   regs_->I2S_CLKCFG_SETUP.set_read_cb(vpvper::pulpissimo::simple_read);
-  regs_->I2S_CLKCFG_SETUP.set_write_cb([this](scc::sc_register<uint32_t> &reg, uint32_t v, sc_core::sc_time d) -> bool {
-    reg.put(v);
-
-    gen::i2s_channel_regs::I2S_CLKCFG_SETUP_t clk_cfg{regs_->I2S_CLKCFG_SETUP.get()};
-    if (clk_cfg.SLAVE_CLK_EN) {
-      // SLAVE_EN | SLAVE_2CH | SLAVE_LSB | SLAVE_BITS | SLAVE_WORDS
-      gen::i2s_channel_regs::I2S_SLV_SETUP_t slv_cfg{regs_->I2S_SLV_SETUP.get()};
-      // slave should have been enabled by this point
-      if (slv_cfg.SLAVE_EN == 1) {
-        // by this time I2S_RX channel should have been enabled
-        gen::i2s_channel_regs::I2S_RX_CFG_t rx_cfg{regs_->I2S_RX_CFG.get()};
-        if (rx_cfg.EN == 0) {
-          return false;
-        }
-
-        auto l2mem_data{std::make_unique<unsigned char[]>(regs_->I2S_RX_SIZE.get())};
-        size_t num_transfers{(regs_->I2S_RX_SIZE.get() * 8) / (slv_cfg.SLAVE_BITS + 1)};
-        for (size_t i = 0; i < num_transfers; ++i) {
-          sc_core::sc_time delay{sc_core::SC_ZERO_TIME};
-          tlm::tlm_generic_payload gp{};
-          gp.set_command(tlm::TLM_READ_COMMAND);
-          gp.set_data_length((slv_cfg.SLAVE_BITS + 1) / 8);
-          gp.set_data_ptr(l2mem_data.get() + i * ((slv_cfg.SLAVE_BITS + 1) / 8));
-
-          // TODO: i am not sure yet how to select particular i2s interface out of many as there is no chip-select
-          soc_->transmitI2SSocket(0, gp, delay);
-          if (gp.get_response_status() != tlm::TLM_OK_RESPONSE) {
-            return false;
-          }
-        }
-
-        // send data to l2mem
-        soc_->writeMemory(l2mem_data.get(), regs_->I2S_RX_SADDR.get() - kL2MemBaseAddr, regs_->I2S_RX_SIZE.get());
-        rx_eot_event_.notify(kRxEoTDelay);
-      } else {
-        return false;
-      }
-    }
-
-    // if (clk_cfg.PDM_CLK_EN) {
-    // }
-
-    return true;
-  });
+  regs_->I2S_CLKCFG_SETUP.set_write_cb(vpvper::pulpissimo::simple_write);
 
   // I2S_SLV_SETUP register
   // configuration of I2S slave
   regs_->I2S_SLV_SETUP.set_read_cb(vpvper::pulpissimo::simple_read);
-  regs_->I2S_SLV_SETUP.set_write_cb(vpvper::pulpissimo::simple_write);
+  regs_->I2S_SLV_SETUP.set_write_cb([this](scc::sc_register<uint32_t> &reg, uint32_t v, sc_core::sc_time d) -> bool {
+    reg.put(v);
+
+    return true;
+  });
 
   // I2S_MST_SETUP register
   // configuration of I2S master
@@ -324,14 +296,6 @@ void udma::I2S::regs_cb() {
   regs_->I2S_PDM_SETUP.set_read_cb(vpvper::pulpissimo::simple_read);
   regs_->I2S_PDM_SETUP.set_write_cb(vpvper::pulpissimo::simple_write);
 }
-
-// bool udma::SPIM::isCMDCFGOk() {
-//   // printCMDCFG();
-//
-//   // queue a transfer if one is already ongoing
-//
-//   return true;
-// }
 
 void udma::SPIM::printCMDCFG() {
   std::cout << "EN = " << current_cmd_cfg_.EN << "\t";
@@ -421,7 +385,7 @@ int udma::SPIM::handleCommands() {
         // send data to l2mem
         // TODO: lsb stuff??
         soc_->writeMemory(l2mem_data.get(), regs_->SPIM_RX_SADDR.get() - kL2MemBaseAddr, words_num * words_size);
-        rx_eot_event_.notify(kRxEoTDelay);
+        rx_eot_events_.notify(kRxEoTDelay);
 
         break;
       }
@@ -476,7 +440,7 @@ int udma::SPIM::handleCommands() {
           }
         }
 
-        tx_eot_event_.notify(kTxEoTDelay);
+        tx_eot_events_.notify(kTxEoTDelay);
 
         break;
       }
@@ -494,14 +458,14 @@ int udma::SPIM::handleCommands() {
 
 void udma::SPIM::notifyRxEventGenerator() {
   while (1) {
-    wait(rx_eot_event_);
+    wait();
     soc_->setEvent(7);
   }
 }
 
 void udma::SPIM::notifyTxEventGenerator() {
   while (1) {
-    wait(tx_eot_event_);
+    wait();
     soc_->setEvent(7);
   }
 }
@@ -509,21 +473,49 @@ void udma::SPIM::notifyTxEventGenerator() {
 udma::I2S::I2S(gen::udma_regs *udma_regs, SoC *soc)
     : udma::PeriphBase{sc_core::sc_module_name{"udma-i2s"}, udma_regs, soc} {
   SC_THREAD(notifyRxEventGenerator);
+  sensitive << rx_eot_events_;
   SC_THREAD(notifyTxEventGenerator);
+  sensitive << tx_eot_events_;
 
   regs_ = &udma_regs->i_i2s;
 }
 
 void udma::I2S::notifyRxEventGenerator() {
   while (1) {
-    wait(rx_eot_event_);
-    soc_->setEvent(20);
+    wait();
+
+    // slave should have been enabled all this time
+    gen::i2s_channel_regs::I2S_CLKCFG_SETUP_t clk_cfg{regs_->I2S_CLKCFG_SETUP.get()};
+    gen::i2s_channel_regs::I2S_SLV_SETUP_t slv_cfg{regs_->I2S_SLV_SETUP.get()};
+    if (clk_cfg.SLAVE_CLK_EN == 1 && slv_cfg.SLAVE_EN == 1) {
+      auto l2mem_data{std::make_unique<unsigned char[]>(regs_->I2S_RX_SIZE.get())};
+      size_t num_transfers{(regs_->I2S_RX_SIZE.get() * 8) / (slv_cfg.SLAVE_BITS + 1)};
+      for (size_t i = 0; i < num_transfers; ++i) {
+        sc_core::sc_time delay{sc_core::SC_ZERO_TIME};
+        tlm::tlm_generic_payload gp{};
+        gp.set_command(tlm::TLM_READ_COMMAND);
+        gp.set_data_length((slv_cfg.SLAVE_BITS + 1) / 8);
+        gp.set_data_ptr(l2mem_data.get() + i * ((slv_cfg.SLAVE_BITS + 1) / 8));
+
+        // TODO: i am not sure yet how to select particular i2s interface out of many as there is no chip-select
+        soc_->transmitI2SSocket(0, gp, delay);
+        if (gp.get_response_status() != tlm::TLM_OK_RESPONSE) {
+          std::cerr << "[udma-i2s] capture request not properly serviced\n";
+          exit(1);
+        }
+      }
+
+      // send data to l2mem
+      soc_->writeMemory(l2mem_data.get(), regs_->I2S_RX_SADDR.get() - kL2MemBaseAddr, regs_->I2S_RX_SIZE.get());
+
+      soc_->setEvent(20);
+    }
   }
 }
 
 void udma::I2S::notifyTxEventGenerator() {
   while (1) {
-    wait(tx_eot_event_);
+    wait();
     soc_->setEvent(20);
   }
 }
