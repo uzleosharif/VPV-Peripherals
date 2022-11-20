@@ -303,10 +303,8 @@ void udma::I2S::regs_cb() {
       }
     }
 
-    if (clk_cfg.PDM_CLK_EN) {
-      std::cout << "[udma-i2s] TODO in I2S_CLKCFG_SETUP write-cb\n";
-      exit(1);
-    }
+    // if (clk_cfg.PDM_CLK_EN) {
+    // }
 
     return true;
   });
