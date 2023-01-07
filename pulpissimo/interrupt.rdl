@@ -77,12 +77,12 @@ regfile interrupt {
         name = "MASK_SET_MIRROR";
         desc = "";
         regwidth=32;
-    } MASK_MIRROR @0x804;
+    } MASK_SET_MIRROR @0x804;
     reg {
         name = "MASK_CLR_MIRROR";
         desc = "";
         regwidth=32;
-    } MASK_MIRROR @0x808;        
+    } MASK_CLR_MIRROR @0x808;        
     reg {
         name = "INT_MIRROR";
         desc = "";
