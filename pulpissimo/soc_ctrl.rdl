@@ -39,7 +39,7 @@ regfile soc_ctrl {
     reg {
         name = "PAD_CFG";
         regwidth=32;
-    } PAD_MUX[15:0] @0x20;    
+    } PAD_CFG[15:0] @0x20;    
     reg {
         name = "JTAG_REG";
         regwidth=32;

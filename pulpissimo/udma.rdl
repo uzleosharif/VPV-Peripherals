@@ -267,7 +267,7 @@ regfile udma {
             } PENDING[5:5] =0;
             field {
                 name = "EN";
-            } EN[4:4] =0;
+            } EN[4:4] =0x1;
             field {
                 name = "DATASIZE";
             } DATASIZE[2:1] =0;
